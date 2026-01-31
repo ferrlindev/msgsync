@@ -25,8 +25,7 @@ case class PulsarNotifier(consumer: Consumer[NotifierPayload]) extends Notifier:
 end PulsarNotifier
 
 object PulsarNotifier:
-  val layer
-      : RLayer[Consumer[NotifierPayload] & NotifierChannel, PulsarNotifier] =
+  val layer: ZLayer[Consumer[NotifierPayload], Throwable, PulsarNotifier] =
     ZLayer.scoped {
       for (consumer <- ZIO.service[Consumer[NotifierPayload]])
         yield PulsarNotifier(consumer)
