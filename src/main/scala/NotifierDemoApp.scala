@@ -15,7 +15,8 @@ import com.sksamuel.pulsar4s.{
   PulsarClientConfig,
   ConsumerConfig,
   ProducerConfig,
-  Producer
+  Producer,
+  Consumer
 }
 import com.sksamuel.pulsar4s.zio.*
 import com.sksamuel.pulsar4s.avro.*
@@ -31,29 +32,10 @@ import com.sksamuel.pulsar4s.DefaultProducerMessage
 
 object NotifierDemoApp extends ZIOAppDefault:
 
-  private def makeC(client: PulsarClient, config: PulsarConfig) =
-    ZLayer.succeed(
-      client.consumer[NotifierPayload](
-        ConsumerConfig(
-          subscriptionName = Subscription(config.consumer.subscriptionName),
-          topics = config.consumer.topics.map(Topic(_)),
-          consumerName = Some(config.consumer.consumerName)
-        )
-      )
-    )
-
-  private def makeP(client: PulsarClient, topics: Set[String]) =
-    ZLayer.succeed(
-      MultiTopicProducer.make(
-        client,
-        topics.map(Topic(_))
-      )
-    )
-
   private def readResource[A](fileName: String)(using
       config: Config[A]
   ): ZIO[Any, Config.Error, A] =
-    val c =
+    read[A] {
       config.from(
         TypesafeConfigProvider
           .fromTypesafeConfig(
@@ -61,7 +43,7 @@ object NotifierDemoApp extends ZIOAppDefault:
           )
           .nested("pulsar")
       )
-    read[A](c)
+    }
 
   def demoWithProducers: ZIO[MultiTopicProducer, Throwable, Unit] =
     for {
@@ -109,12 +91,66 @@ object NotifierDemoApp extends ZIOAppDefault:
       }
     } yield ()
 
-  def appLogic: ZIO[
-    Notifier & MultiTopicProducer & NotifierChannel,
+  given Config[PulsarConfig] = PulsarConfig.config
+
+  // For demo purposes only
+  val producerLayer: ZLayer[
+    PulsarClient & PulsarConfig,
     Throwable,
-    Unit
+    Map[Topic, Producer[NotifierPayload]]
   ] =
+    ZLayer.scoped {
+      for {
+        client <- ZIO.service[PulsarClient]
+        config <- ZIO.service[PulsarConfig]
+      } yield MultiTopicProducer.make(
+        client,
+        config.consumer.topics.map(Topic(_)).toSet
+      )
+    }
+
+  val demoLayer = producerLayer >>> MultiTopicProducer.layer
+
+  val consumerLayer: ZLayer[PulsarClient & PulsarConfig, Throwable, Consumer[
+    NotifierPayload
+  ]] =
+    ZLayer.scoped {
+      for {
+        client <- ZIO.service[PulsarClient]
+        config <- ZIO.service[PulsarConfig]
+        consumer = client
+          .consumer[NotifierPayload](
+            ConsumerConfig(
+              subscriptionName = Subscription(config.consumer.subscriptionName),
+              topics = config.consumer.topics.map(Topic(_)),
+              consumerName = Some(config.consumer.consumerName)
+            )
+          )
+      } yield consumer
+    }
+
+  val notifierLayer: ZLayer[
+    PulsarClient & PulsarConfig,
+    Throwable,
+    Notifier
+  ] = consumerLayer >>> PulsarNotifier.layer
+
+  val channelLayer = ((ZLayer.succeed(Console.ConsoleLive) >>>
+    (ViaEmail.live ++ ViaPush.live)) ++
+    ZLayer.succeed(Console.ConsoleLive)) >>>
+    NotifierChannel.live
+
+  val fullLayer = ZLayer {
     for {
+      config <- ZIO.service[PulsarConfig]
+      client = PulsarClient(PulsarClientConfig(config.serviceUrl))
+    } yield client
+  } >>> channelLayer ++ notifierLayer ++ demoLayer
+
+  def appLogic
+      : ZIO[Notifier & MultiTopicProducer & NotifierChannel, Throwable, Unit] =
+    for {
+      config <- readResource("msg-pulsar.conf")
       notifier <- ZIO.service[Notifier]
       // stubber to publis message for push and email
       _ <- demoWithProducers
@@ -122,26 +158,12 @@ object NotifierDemoApp extends ZIOAppDefault:
       _ <- notifier.start
     } yield ()
 
-  given Config[PulsarConfig] = PulsarConfig.config
-
   override def run: ZIO[Any, Throwable, Unit] =
     for {
       config <- readResource("msg-pulsar.conf")
-      clientConfig = PulsarClientConfig(config.serviceUrl)
-      client = PulsarClient(clientConfig)
-      console = ZLayer.succeed(Console.ConsoleLive)
-      consumer = makeC(client, config)
-      producer = makeP(client, Set("email.events", "push.events"))
-      _ <- appLogic.provide(
-        console,
-        ViaEmail.live,
-        ViaPush.live,
-        NotifierChannel.live,
-        PulsarNotifier.layer,
-        MultiTopicProducer.layer,
-        producer,
-        consumer
-      )
+      _ <- appLogic
+        .provideLayer(fullLayer)
+        .provide(ZLayer.succeed(config))
     } yield ()
 
 end NotifierDemoApp
