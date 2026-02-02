@@ -6,11 +6,12 @@ import com.sksamuel.pulsar4s.zio.*
 import com.sksamuel.pulsar4s.zio.ZioAsyncHandler.handler
 import com.sksamuel.pulsar4s.Consumer
 import io.msgsync.core.*
-import Notifier.*
+import io.msgsync.core.Notifier
 import java.util.UUID
 
-case class PulsarNotifier(consumer: Consumer[NotifierPayload]) extends Notifier:
-  override def subscribe: Stream[Throwable, Message[NotifierPayload]] =
+case class PulsarNotifier(consumer: Consumer[Notifier.NotifierPayload])
+    extends Notifier:
+  override def subscribe: Stream[Throwable, Message[Notifier.NotifierPayload]] =
     for (msg <- ZStream.repeatZIO(consumer.receiveAsync)) yield {
       val payload = msg.value
       val id = MessageId(UUID.nameUUIDFromBytes(msg.messageId.bytes))
@@ -25,9 +26,10 @@ case class PulsarNotifier(consumer: Consumer[NotifierPayload]) extends Notifier:
 end PulsarNotifier
 
 object PulsarNotifier:
-  val layer: ZLayer[Consumer[NotifierPayload], Throwable, PulsarNotifier] =
+  val layer
+      : ZLayer[Consumer[Notifier.NotifierPayload], Throwable, PulsarNotifier] =
     ZLayer.scoped {
-      for (consumer <- ZIO.service[Consumer[NotifierPayload]])
+      for (consumer <- ZIO.service[Consumer[Notifier.NotifierPayload]])
         yield PulsarNotifier(consumer)
     }
 end PulsarNotifier

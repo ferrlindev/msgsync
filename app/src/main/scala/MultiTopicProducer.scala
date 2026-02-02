@@ -1,6 +1,7 @@
 package io.msgsync.app
 
 import zio.*
+import io.msgsync.core.Notifier
 import io.msgsync.core.Notifier.*
 import org.apache.pulsar.client.api.Schema
 import com.sksamuel.pulsar4s.{Producer, PulsarClient, ProducerConfig, Topic}
@@ -9,9 +10,9 @@ import scala.util.{Success, Failure}
 
 /** for Demo purposes only */
 case class MultiTopicProducer(
-    producers: Ref[Map[Topic, Producer[NotifierPayload]]]
+    producers: Ref[Map[Topic, Producer[Notifier.NotifierPayload]]]
 ):
-  def send(topic: Topic, message: NotifierPayload): Task[Unit] =
+  def send(topic: Topic, message: Notifier.NotifierPayload): Task[Unit] =
     for {
       dict <- producers.get
       _ <- dict.get(topic) match {
@@ -30,9 +31,9 @@ object MultiTopicProducer:
   def make(
       client: PulsarClient,
       topics: Set[Topic]
-  )(using Schema[NotifierPayload]): Map[Topic, Producer[NotifierPayload]] =
+  )(using Schema[Notifier.NotifierPayload]): Map[Topic, Producer[Notifier.NotifierPayload]] =
     topics.zipWithIndex.map { (topic, index) =>
-      topic -> client.producer[NotifierPayload](
+      topic -> client.producer[Notifier.NotifierPayload](
         ProducerConfig(
           topic = topic,
           producerName = Some(s"producer-test-$index")
@@ -41,11 +42,11 @@ object MultiTopicProducer:
     }.toMap
 
   val layer: RLayer[
-    Map[Topic, Producer[NotifierPayload]],
+    Map[Topic, Producer[Notifier.NotifierPayload]],
     MultiTopicProducer
   ] = ZLayer.scoped {
     for {
-      dict <- ZIO.service[Map[Topic, Producer[NotifierPayload]]]
+      dict <- ZIO.service[Map[Topic, Producer[Notifier.NotifierPayload]]]
       ref <- Ref.make(dict)
     } yield MultiTopicProducer(ref)
   }
