@@ -13,6 +13,9 @@ import com.sksamuel.pulsar4s.avro.given
 import zio.config.typesafe.TypesafeConfigProvider
 import com.typesafe.config.ConfigFactory
 
+import io.msgsync.app.ConsumerConfig
+import scala.jdk.CollectionConverters.*
+
 object NotifierDemoApp extends ZIOAppDefault:
 
   private def readResource[A](
@@ -21,7 +24,9 @@ object NotifierDemoApp extends ZIOAppDefault:
     read[A] {
       config.from(
         TypesafeConfigProvider
-          .fromTypesafeConfig(ConfigFactory.parseResources(fileName))
+          .fromTypesafeConfig(
+            ConfigFactory.parseResources(fileName)
+          )
           .nested("pulsar")
       )
     }
@@ -48,7 +53,8 @@ object NotifierDemoApp extends ZIOAppDefault:
           s"Demo email body for message $i"
         )
         val emailPayload = NotifierPayload("Email", Some(email), None)
-        demoProducer.send(Topic("email.events"), emailPayload)
+        demoProducer
+          .send(Topic("email.events"), emailPayload)
       }
       // Send 5 demo push messages
       _ <- ZIO.foreach(1 to 5) { i =>
@@ -58,11 +64,12 @@ object NotifierDemoApp extends ZIOAppDefault:
           s"Demo push message for notification $i"
         )
         val pushPayload = NotifierPayload("Push", None, Some(push))
-        demoProducer.send(Topic("push.events"), pushPayload)
+        demoProducer
+          .send(Topic("push.events"), pushPayload)
       }
     } yield ()
 
-  given Config[PulsarConfig] = PulsarConfig.config
+  import io.msgsync.app.PulsarConfig.given
 
   def appLogic: ZIO[
     Notifier & app.MultiTopicProducer & core.NotifierChannel,
@@ -75,16 +82,9 @@ object NotifierDemoApp extends ZIOAppDefault:
       _ <- notifier.start
     } yield ()
 
-  override def run: ZIO[Any, Throwable, ExitCode] =
+  override def run =
     appLogic
       .provide(
-        AppLayers.fullDemoLayer,
-        ZLayer.fromZIO(readResource("msg-pulsar.conf"))
-      )
-      .timeout(6.seconds)
-      .foldZIO(
-        error =>
-          ZIO.logError(s"Application failed: $error").as(ExitCode.failure),
-        _ =>
-          ZIO.logInfo("Application completed successfully").as(ExitCode.success)
+        ZLayer.fromZIO(readResource("msg-pulsar.conf")),
+        AppLayers.fullDemoLayer
       )

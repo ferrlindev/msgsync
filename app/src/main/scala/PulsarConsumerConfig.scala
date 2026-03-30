@@ -1,8 +1,28 @@
 package io.msgsync.app
 
 import zio.*
-import zio.config.*
-import zio.config.magnolia.*
+import com.typesafe.config.ConfigFactory
+import java.time.Duration
+
+object ConsumerConfig:
+  def hoconDuration(key: String): Config[Duration] =
+    Config.string(key).mapAttempt { s =>
+      ConfigFactory.parseString(s"v = $s").getDuration("v")
+    }
+
+  given Config[ConsumerConfig] =
+    (
+      Config.listOf("topics", Config.string) ++
+        Config.string("subscriptionName") ++
+        Config.string("subscriptionType") ++
+        Config.string("consumerName") ++
+        Config.string("subscriptionInitialPosition") ++
+        Config.int("receiverQueueSize") ++
+        Config.int("maxTotalReceiverQueueSize") ++
+        hoconDuration("ackTimeout") ++
+        hoconDuration("negativeAckRedeliveryDelay") ++
+        Config.boolean("enableRetryOnDeadLetter")
+    ).map(ConsumerConfig.apply)
 
 case class ConsumerConfig(
     topics: List[String],
@@ -23,5 +43,8 @@ case class PulsarConfig(
 )
 
 object PulsarConfig:
-  val config: Config[PulsarConfig] =
-    deriveConfig[PulsarConfig]
+  given Config[PulsarConfig] =
+    (
+      Config.string("serviceUrl") ++
+        summon[Config[ConsumerConfig]].nested("consumer")
+    ).map(PulsarConfig.apply)
