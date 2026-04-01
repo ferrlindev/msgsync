@@ -72,6 +72,7 @@ lazy val app = (project in file("app"))
       pulsar4sZio,
       pulsarJavaClient,
       scalaTest,
+      tcPulsar,
       scalacheck
     )
   )

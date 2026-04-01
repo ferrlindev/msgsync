@@ -11,9 +11,11 @@ import java.util.UUID
 
 case class PulsarNotifier(consumer: Consumer[Notifier.NotifierPayload])
     extends Notifier:
-  override def subscribe: Stream[Throwable, Message[Notifier.NotifierPayload]] =
+  override def subscribe
+      : ZStream[Any, Throwable, Message[Notifier.NotifierPayload]] =
     for (msg <- ZStream.repeatZIO(consumer.receiveAsync)) yield {
       val payload = msg.value
+      consumer.acknowledge(msg.messageId)
       val id = MessageId(UUID.nameUUIDFromBytes(msg.messageId.bytes))
       Message(id, payload)
     }
@@ -22,14 +24,13 @@ case class PulsarNotifier(consumer: Consumer[Notifier.NotifierPayload])
     subscribe
       .mapZIOParUnordered(4)(msg => NotifierChannel.send(msg.payload))
       .runDrain
-
 end PulsarNotifier
 
 object PulsarNotifier:
   val layer
       : ZLayer[Consumer[Notifier.NotifierPayload], Throwable, PulsarNotifier] =
-    ZLayer.scoped {
+    ZLayer.scoped(
       for (consumer <- ZIO.service[Consumer[Notifier.NotifierPayload]])
         yield PulsarNotifier(consumer)
-    }
+    )
 end PulsarNotifier

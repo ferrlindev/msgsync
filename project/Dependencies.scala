@@ -19,6 +19,8 @@ object Dependencies {
 
     // val slf4j = "2.7.1"
     val pulsarJava = "4.1.2"
+
+    val testContainer = "0.41.4"
   }
 
   val kyoPrelude = "io.getkyo" %% "kyo-prelude" % Versions.kyo
@@ -37,6 +39,9 @@ object Dependencies {
   val zioTestScalaCheck =
     "dev.zio" %% "zio-test-scalacheck" % Versions.zio % Test
   val scalacheck = "org.scalacheck" %% "scalacheck" % Versions.scalacheck % Test
+
+  val tcPulsar =
+    "com.dimafeng" %% "testcontainers-scala-pulsar" % Versions.testContainer % Test
 
   val circeCore = "io.circe" %% "circe-core" % Versions.circe
   val circeParser = "io.circe" %% "circe-parser" % Versions.circe

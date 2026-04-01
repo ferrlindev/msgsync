@@ -58,10 +58,9 @@ object AppLayers {
     ZLayer.fromZIO {
       for {
         config <- ZIO.service[PulsarConfig]
-        client <- ZIO.succeed(
-          PulsarClient(PulsarClientConfig(config.serviceUrl))
-        )
-      } yield client
+        client = PulsarClient(PulsarClientConfig(config.serviceUrl))
+        zClient <- ZIO.succeed(client)
+      } yield zClient
     } >>> CoreLayers.channelLayer ++ notifierLayer ++ demoLayer
 
 }

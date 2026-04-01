@@ -12,9 +12,8 @@ object ViaPush:
 
   val live: ZLayer[Console, Nothing, ViaPush] =
     ZLayer {
-      for {
-        console <- ZIO.service[Console]
-      } yield new ViaPush {
+      for console <- ZIO.service[Console]
+      yield new ViaPush {
         def send(push: Push): Task[Unit] =
           console.printLine(
             s"Sending via push notification channel to ${push.recipient}: ${push.message}"

@@ -12,9 +12,8 @@ object ViaEmail:
 
   val live: ZLayer[Console, Nothing, ViaEmail] =
     ZLayer {
-      for {
-        console <- ZIO.service[Console]
-      } yield new ViaEmail {
+      for console <- ZIO.service[Console]
+      yield new ViaEmail {
         def send(email: Email): Task[Unit] =
           console.printLine(
             s"Sending via email channel to ${email.recipient}: ${email.subject} and body ${email.body}"
